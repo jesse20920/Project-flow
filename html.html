@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flow & Concentration Calculator</title>
+    <style>
+        body {
+            display: flex;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .sidebar {
+            width: 300px;
+            background-color: #f0f0f0;
+            padding: 20px;
+            margin-right: 20px;
+            border-radius: 5px;
+        }
+
+        .main-content {
+            flex: 1;
+        }
+
+        .syringe-container {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            position: relative;
+        }
+        
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+
+        .syringe-1 { background-color: #FFE6E6; }
+        .syringe-2 { background-color: #E6FFE6; }
+        .syringe-3 { background-color: #E6E6FF; }
+        .syringe-4 { background-color: #FFFFE6; }
+        .syringe-5 { background-color: #FFE6FF; }
+        .syringe-6 { background-color: #E6FFFF; }
+
+        #results {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+
+        .tube-settings {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+        }
+
+        .substance-properties {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #ffffff;
+            border-radius: 5px;
+        }
+
+        .substance {
+            margin: 10px 0;
+            padding: 5px;
+        }
+
+        .delete-substance-btn {
+            background-color: #ff8888;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 3px 8px;
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+
+        hr {
+            border: 1px solid #ddd;
+            margin: 10px 0;
+        }
+    </style>
+
+    <script>
+        const TUBE_DIAMETER = 0.75; // Fixed tube diameter in mm
+
+        function addSubstanceToSyringe(syringeDiv) {
+            let substanceContainer = syringeDiv.querySelector('.substances');
+            let substanceCount = substanceContainer.children.length + 1;
+            
+            let substanceDiv = document.createElement('div');
+            substanceDiv.className = 'substance';
+            substanceDiv.innerHTML = `
+                <hr>
+                <button class="delete-substance-btn" onclick="deleteSubstance(this)">Remove Substance</button>
+                <label>Substance ${substanceCount}:</label>
+                <select class="name" onchange="calculate()">
+                    <option value="Monomeer">Monomeer</option>
+                    <option value="RAFT">RAFT</option>
+                    <option value="Photocatalyst">Photocatalyst</option>
+                </select><br>
+                <label>Concentration (µM): </label>
+                <input type="number" class="conc" value="0" onchange="calculate()"><br>
+            `;
+            substanceContainer.appendChild(substanceDiv);
+            calculate();
+        }
+
+        function deleteSubstance(btn) {
+            btn.parentElement.remove();
+            calculate();
+        }
+
+        function addSyringe() {
+            let container = document.getElementById('syringeContainer');
+            let index = container.children.length + 1;
+            
+            let div = document.createElement('div');
+            let colorIndex = ((index - 1) % 6) + 1;
+            div.className = `syringe-container syringe-${colorIndex}`;
+            div.innerHTML = `
+                <button class="delete-btn" onclick="deleteSyringe(this)">X</button>
+                <h3>Syringe ${index}</h3>
+                <label>Flow Spuit ${index} (µL/min): </label>
+                <input type="number" class="flow" value="0" onchange="calculate()"><br>
+                <button onclick="addSubstanceToSyringe(this.parentElement)">Add Substance</button>
+                <div class="substances">
+                    <div class="substance">
+                        <label>Substance 1:</label>
+                        <select class="name" onchange="calculate()">
+                            <option value="Monomeer">Monomeer</option>
+                            <option value="RAFT">RAFT</option>
+                            <option value="Photocatalyst">Photocatalyst</option>
+                        </select><br>
+                        <label>Concentration (µM): </label>
+                        <input type="number" class="conc" value="0" onchange="calculate()"><br>
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+            calculate();
+        }
+
+        function deleteSyringe(btn) {
+            btn.parentElement.remove();
+            renumberSyringes();
+            calculate();
+        }
+
+        function renumberSyringes() {
+            let syringes = document.getElementsByClassName('syringe-container');
+            for(let i = 0; i < syringes.length; i++) {
+                syringes[i].querySelector('h3').textContent = `Syringe ${i+1}`;
+            }
+        }
+
+        function calculate() {
+            let syringes = document.getElementsByClassName('syringe-container');
+            let totalFlow = 0;
+            let concentrations = {
+                'Monomeer': { flow: 0, conc: 0, mass: 0 },
+                'RAFT': { flow: 0, conc: 0, mass: 0 },
+                'Photocatalyst': { flow: 0, conc: 0, mass: 0 }
+            };
+
+            let tubeLength = parseFloat(document.getElementById('tubeLength').value) || 0; // mm
+            let properties = {
+                'Monomeer': {
+                    molMass: parseFloat(document.getElementById('monomerMass').value) || 0,
+                    density: parseFloat(document.getElementById('monomerDensity').value) || 1
+                },
+                'RAFT': {
+                    molMass: parseFloat(document.getElementById('raftMass').value) || 0,
+                    density: parseFloat(document.getElementById('raftDensity').value) || 1
+                },
+                'Photocatalyst': {
+                    molMass: parseFloat(document.getElementById('photocatMass').value) || 0,
+                    density: parseFloat(document.getElementById('photocatDensity').value) || 1
+                }
+            };
+
+            // Calculate tube volume in µL
+            // π * r² * length, where r is in mm and length is in mm
+            let tubeVolume = Math.PI * Math.pow((TUBE_DIAMETER / 2), 2) * tubeLength;
+            // Convert from mm³ to µL (1 mm³ = 1 µL)
+
+            for (let syringe of syringes) {
+                let flow = parseFloat(syringe.querySelector('.flow').value) || 0;
+                totalFlow += flow;
+
+                // Handle multiple substances per syringe
+                let substances = syringe.querySelectorAll('.substance');
+                for (let substance of substances) {
+                    let name = substance.querySelector('.name').value;
+                    let conc = parseFloat(substance.querySelector('.conc').value) || 0;
+                    let molMass = properties[name].molMass;
+                    let density = properties[name].density;
+
+                    concentrations[name].flow += flow;
+                    concentrations[name].conc += (flow * conc);
+                    concentrations[name].mass += (flow * conc * molMass) / (1000000 * density);
+                }
+            }
+
+            // Calculate residence time in minutes
+            let residenceTime = totalFlow > 0 ? tubeVolume / totalFlow : 0;
+
+            // Calculate flow velocity in mm/s
+            // Convert flow from µL/min to mm³/s and divide by cross-sectional area
+            let crossSectionalArea = Math.PI * Math.pow((TUBE_DIAMETER / 2), 2); // mm²
+            let flowVelocity = totalFlow > 0 ? 
+                (totalFlow / 60) / crossSectionalArea : 0;
+
+            let results = '<h3>Results:</h3>';
+            results += `Total Flow: ${totalFlow.toFixed(2)} µL/min<br>`;
+            results += `Residence Time: ${residenceTime.toFixed(2)} min<br>`;
+            results += `Flow Velocity: ${flowVelocity.toFixed(2)} mm/s<br><br>`;
+            results += 'Final Concentrations:<br>';
+
+            for (let [name, data] of Object.entries(concentrations)) {
+                if (data.flow > 0) {
+                    let finalConc = data.conc / totalFlow;
+                    results += `${name}:<br>`;
+                    results += `- Concentration: ${finalConc.toFixed(2)} µM<br>`;
+                    results += `- Mass Flow: ${(data.mass).toFixed(6)} g/min<br>`;
+                }
+            }
+
+            document.getElementById('results').innerHTML = results;
+        }
+    </script>
+</head>
+<body>
+    <div class="sidebar">
+        <h3>Substance Properties</h3>
+        
+        <div class="substance-properties">
+            <h4>Monomeer</h4>
+            <label>Molecular Mass (g/mol): </label>
+            <input type="number" id="monomerMass" value="100" onchange="calculate()"><br>
+            <label>Density (g/mL): </label>
+            <input type="number" id="monomerDensity" value="1" onchange="calculate()">
+        </div>
+
+        <div class="substance-properties">
+            <h4>RAFT</h4>
+            <label>Molecular Mass (g/mol): </label>
+            <input type="number" id="raftMass" value="200" onchange="calculate()"><br>
+            <label>Density (g/mL): </label>
+            <input type="number" id="raftDensity" value="1" onchange="calculate()">
+        </div>
+
+        <div class="substance-properties">
+            <h4>Photocatalyst</h4>
+            <label>Molecular Mass (g/mol): </label>
+            <input type="number" id="photocatMass" value="300" onchange="calculate()"><br>
+            <label>Density (g/mL): </label>
+            <input type="number" id="photocatDensity" value="1" onchange="calculate()">
+        </div>
+    </div>
+
+    <div class="main-content">
+        <h2>Flow & Concentration Calculator</h2>
+        
+        <div class="tube-settings">
+            <h3>Tube Settings</h3>
+            <label>Tube Length (mm): </label>
+            <input type="number" id="tubeLength" value="1000" onchange="calculate()"><br>
+            <label>Tube Inner Diameter: 750 µm (fixed)</label>
+        </div>
+
+        <button onclick="addSyringe()">Add Syringe</button>
+        <div id="syringeContainer">
+            <div class="syringe-container syringe-1">
+                <button class="delete-btn" onclick="deleteSyringe(this)">X</button>
+                <h3>Syringe 1</h3>
+                <label>Flow Spuit 1 (µL/min): </label>
+                <input type="number" class="flow" value="60" onchange="calculate()"><br>
+                <button onclick="addSubstanceToSyringe(this.parentElement)">Add Substance</button>
+                <div class="substances">
+                    <div class="substance">
+                        <label>Substance 1:</label>
+                        <select class="name" onchange="calculate()">
+                            <option value="Monomeer">Monomeer</option>
+                            <option value="RAFT">RAFT</option>
+                            <option value="Photocatalyst">Photocatalyst</option>
+                        </select><br>
+                        <label>Concentration (µM): </label>
+                        <input type="number" class="conc" value="100" onchange="calculate()"><br>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="results">
+            <!-- Results will be displayed here -->
+        </div>
+    </div>
+</body>
+</html>

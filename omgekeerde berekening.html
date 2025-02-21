@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reverse Flow Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        .syringe { 
+            margin: 10px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            position: relative;
+        }
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #ff4444;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        button {
+            margin: 10px;
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .error {
+            color: red;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #ffe6e6;
+            border-radius: 3px;
+        }
+        input[type="number"] {
+            width: 100px;
+            padding: 5px;
+            margin: 5px;
+        }
+        label {
+            display: inline-block;
+            width: 150px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Reverse Flow Calculator</h1>
+    
+    <div>
+        <label>Total Flow (µL/min):</label>
+        <input type="number" id="totalFlow" step="0.1">
+    </div>
+
+    <div id="finalConcentrations">
+        <h3>Target Final Concentrations</h3>
+        <div>
+            <label>Monomer (mmol/L):</label>
+            <input type="number" id="finalMonomer" step="0.1">
+        </div>
+        <div>
+            <label>RAFT (mmol/L):</label>
+            <input type="number" id="finalRAFT" step="0.1">
+        </div>
+        <div>
+            <label>Photocatalyst (mmol/L):</label>
+            <input type="number" id="finalPhoto" step="0.1">
+        </div>
+    </div>
+
+    <div id="syringes">
+        <h3>Syringe Concentrations</h3>
+    </div>
+
+    <button onclick="addSyringe()">Add Syringe</button>
+    <button onclick="calculateFlows()">Calculate Flows</button>
+    <div id="results"></div>
+
+    <script>
+        function addSyringe() {
+            const syringesDiv = document.getElementById('syringes');
+            const syringeCount = syringesDiv.getElementsByClassName('syringe').length;
+            
+            const newSyringe = document.createElement('div');
+            newSyringe.className = 'syringe';
+            newSyringe.innerHTML = `
+                <button class="delete-btn" onclick="this.parentElement.remove()">X</button>
+                <h4>Syringe ${syringeCount + 1}</h4>
+                <label>Monomer (mmol/L):</label>
+                <input type="number" class="monomer" step="0.1"><br>
+                <label>RAFT (mmol/L):</label>
+                <input type="number" class="raft" step="0.1"><br>
+                <label>Photocatalyst (mmol/L):</label>
+                <input type="number" class="photo" step="0.1">
+            `;
+            syringesDiv.appendChild(newSyringe);
+        }
+
+        function validateSolution(totalFlow, finalConc, syringeConcs) {
+            if (totalFlow <= 0) {
+                throw new Error("Total flow must be positive");
+            }
+
+            for (let substance of ['monomer', 'raft', 'photo']) {
+                if (finalConc[substance] > 0) {
+                    let maxConc = Math.max(...syringeConcs.map(s => s[substance]));
+                    
+                    if (maxConc === 0) {
+                        throw new Error(`No syringe contains ${substance}`);
+                    }
+                    
+                    if (finalConc[substance] > maxConc) {
+                        throw new Error(`Target ${substance} concentration (${finalConc[substance]}) is higher than maximum available (${maxConc})`);
+                    }
+                }
+            }
+        }
+
+        function solveFlows(totalFlow, finalConc, syringeConcs) {
+            validateSolution(totalFlow, finalConc, syringeConcs);
+            
+            const n = syringeConcs.length;
+            if (n < 2) throw new Error("At least two syringes are required");
+
+            const flows = new Array(n).fill(0);
+            const substances = ['monomer', 'raft', 'photo'].filter(s => finalConc[s] > 0);
+            
+            if (substances.length === 0) {
+                throw new Error("At least one target concentration must be specified");
+            }
+
+            let totalRequiredFlow = 0;
+
+            // Calculate required flow for each substance
+            for (let substance of substances) {
+                let maxConc = 0;
+                let maxIndex = -1;
+
+                // Find syringe with highest concentration
+                for (let i = 0; i < n; i++) {
+                    if (syringeConcs[i][substance] > maxConc) {
+                        maxConc = syringeConcs[i][substance];
+                        maxIndex = i;
+                    }
+                }
+
+                // Calculate required flow for this substance
+                if (maxIndex >= 0) {
+                    const requiredFlow = (finalConc[substance] * totalFlow) / maxConc;
+                    flows[maxIndex] = requiredFlow;
+                    totalRequiredFlow += requiredFlow;
+                }
+            }
+
+            // Scale flows to match total flow
+            const scaleFactor = totalFlow / totalRequiredFlow;
+            for (let i = 0; i < n; i++) {
+                flows[i] *= scaleFactor;
+            }
+
+            return flows;
+        }
+
+        function calculateFlows() {
+            try {
+                const totalFlow = parseFloat(document.getElementById('totalFlow').value);
+                const finalConc = {
+                    monomer: parseFloat(document.getElementById('finalMonomer').value) || 0,
+                    raft: parseFloat(document.getElementById('finalRAFT').value) || 0,
+                    photo: parseFloat(document.getElementById('finalPhoto').value) || 0
+                };
+
+                const syringes = document.getElementsByClassName('syringe');
+                let syringeConcs = [];
+
+                for (let syringe of syringes) {
+                    syringeConcs.push({
+                        monomer: parseFloat(syringe.querySelector('.monomer').value) || 0,
+                        raft: parseFloat(syringe.querySelector('.raft').value) || 0,
+                        photo: parseFloat(syringe.querySelector('.photo').value) || 0
+                    });
+                }
+
+                let flows = solveFlows(totalFlow, finalConc, syringeConcs);
+
+                let results = document.getElementById('results');
+                results.innerHTML = '';
+                flows.forEach((flow, i) => {
+                    results.innerHTML += `<p>Syringe ${i + 1} Flow: ${flow.toFixed(2)} µL/min</p>`;
+                });
+            } catch (error) {
+                let results = document.getElementById('results');
+                results.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        // Add initial syringes
+        addSyringe();
+        addSyringe();
+    </script>
+</body>
+</html>
